@@ -98,7 +98,7 @@ jobs:
           release = repo.create_git_release(
               tag=latest_version,
               name=latest_version,
-              message=f"Minecraft {latest_version} release",
+              message=f"Minecraft {latest_version}",
               draft=False,
               prerelease=False
           )
