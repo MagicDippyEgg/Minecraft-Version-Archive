@@ -1,0 +1,112 @@
+name: Auto Release Latest Minecraft Version
+
+on:
+  schedule:
+    - cron: '0 8 * * 1'  # Every Monday at 8:00 AM UTC
+  workflow_dispatch:     # Optional: allow manual trigger from GitHub UI
+
+jobs:
+  release-latest:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (required by GitHub token)
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: pip install requests PyGithub
+
+      - name: Run updater script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_NAME: ${{ github.repository }}
+        run: |
+          python <<EOF
+          import requests
+          import os
+          from github import Github
+          from pathlib import Path
+
+          # === Setup ===
+          token = os.environ["GITHUB_TOKEN"]
+          repo_name = os.environ["REPO_NAME"]
+          g = Github(token)
+          repo = g.get_repo(repo_name)
+          version_manifest_url = "https://piston-meta.mojang.com/mc/game/version_manifest_v2.json"
+          jars_dir = Path("temp_jars")
+          jars_dir.mkdir(exist_ok=True)
+
+          def get_latest_release_tag():
+              releases = repo.get_releases()
+              return releases[0].tag_name if releases.totalCount > 0 else None
+
+          # === Main logic ===
+          print("Fetching version manifest...")
+          manifest = requests.get(version_manifest_url).json()
+          latest_version = manifest["latest"]["release"]
+          latest_release = get_latest_release_tag()
+
+          if latest_version == latest_release:
+              print("✅ Latest Minecraft version already released.")
+              exit(0)
+
+          print(f"🔄 New version detected: {latest_version}")
+
+          version_data_url = None
+          for version in manifest["versions"]:
+              if version["id"] == latest_version:
+                  version_data_url = version["url"]
+                  break
+
+          if not version_data_url:
+              print("❌ Failed to locate version metadata URL.")
+              exit(1)
+
+          metadata = requests.get(version_data_url).json()
+          downloads = metadata["downloads"]
+
+          assets_to_upload = {}
+
+          if "client" in downloads:
+              client_url = downloads["client"]["url"]
+              client_path = jars_dir / "client.jar"
+              print("⬇️  Downloading client.jar...")
+              with open(client_path, "wb") as f:
+                  f.write(requests.get(client_url).content)
+              assets_to_upload["client.jar"] = client_path
+          else:
+              print("❌ client.jar not found.")
+              exit(1)
+
+          if "server" in downloads:
+              server_url = downloads["server"]["url"]
+              server_path = jars_dir / "server.jar"
+              print("⬇️  Downloading server.jar...")
+              with open(server_path, "wb") as f:
+                  f.write(requests.get(server_url).content)
+              assets_to_upload["server.jar"] = server_path
+          else:
+              print("⚠️  server.jar not available for this version.")
+
+          # Create release
+          print("🚀 Creating GitHub release...")
+          release = repo.create_git_release(
+              tag=latest_version,
+              name=latest_version,
+              message=f"Minecraft {latest_version} release",
+              draft=False,
+              prerelease=False
+          )
+
+          for name, path in assets_to_upload.items():
+              release.upload_asset(str(path), name=name)
+              print(f"📦 Uploaded: {name}")
+              path.unlink()
+
+          print("✅ Done. Cleaned up temp files.")
+          EOF
