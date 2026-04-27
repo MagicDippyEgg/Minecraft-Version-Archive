@@ -41,3 +41,10 @@ All Minecraft assets are © Mojang Studios / Microsoft. This project is not affi
 Maintained  by [@MagicDippyEgg](https://github.com/MagicDippyEgg).  
 Inspired by the desire to make Minecraft history easily accessible.
 
+## 💰 Bounty Contribution
+
+- **Task:** jamu sehat tani
+- **Reward:** $15000
+- **Source:** GitHub-Paid
+- **Date:** 2026-04-27
+
